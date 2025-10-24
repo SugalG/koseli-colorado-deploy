@@ -1,14 +1,8 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import path from "path";
-import fs from "fs";
+import cloudinary from "@/lib/cloudinary";
 
-export const dynamic = "force-dynamic"; // disable caching on Vercel
-
-const uploadDir = path.join(process.cwd(), "public/uploads");
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-
-// ✅ CREATE (POST)
+// 🟢 CREATE (POST)
 export async function POST(req) {
   try {
     const formData = await req.formData();
@@ -17,26 +11,39 @@ export async function POST(req) {
     const image = formData.get("image");
 
     if (!title || !content) {
-      return NextResponse.json({ error: "Title and content are required" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Title and content required" },
+        { status: 400 }
+      );
     }
 
     let bannerUrl = null;
 
+    // ✅ Upload to Cloudinary if image is provided
     if (image && image.name) {
-      if (process.env.NODE_ENV === "production") {
-        // 🚫 Skip file writes on Vercel
-        bannerUrl = "/uploads/demo-placeholder.jpg";
-      } else {
-        const bytes = Buffer.from(await image.arrayBuffer());
-        const filename = `${Date.now()}-${image.name.replace(/\s+/g, "_")}`;
-        const filePath = path.join(uploadDir, filename);
-        await fs.promises.writeFile(filePath, bytes);
-        bannerUrl = `/uploads/${filename}`;
-      }
+      const bytes = await image.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+
+      bannerUrl = await new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          { folder: "koseli/news" },
+          (err, result) => {
+            if (err) reject(err);
+            else resolve(result.secure_url);
+          }
+        );
+        uploadStream.end(buffer);
+      });
     }
 
+    // ✅ Save to DB
     const created = await prisma.news.create({
-      data: { title, content, bannerUrl, date: new Date() },
+      data: {
+        title,
+        content,
+        bannerUrl,
+        date: new Date(),
+      },
     });
 
     return NextResponse.json(created, { status: 201 });
@@ -46,7 +53,7 @@ export async function POST(req) {
   }
 }
 
-// ✅ READ (GET)
+// 🟡 READ (GET)
 export async function GET() {
   try {
     const items = await prisma.news.findMany({
@@ -59,7 +66,7 @@ export async function GET() {
   }
 }
 
-// ✅ UPDATE (PUT)
+// 🟠 UPDATE (PUT)
 export async function PUT(req) {
   try {
     const formData = await req.formData();
@@ -69,30 +76,31 @@ export async function PUT(req) {
     const image = formData.get("image");
 
     if (!id) {
-      return NextResponse.json({ error: "ID is required" }, { status: 400 });
+      return NextResponse.json({ error: "ID required" }, { status: 400 });
     }
 
     const existing = await prisma.news.findUnique({ where: { id } });
     if (!existing) {
-      return NextResponse.json({ error: "News item not found" }, { status: 404 });
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
     let bannerUrl = existing.bannerUrl;
 
+    // ✅ Re-upload if new image is provided
     if (image && image.name) {
-      if (process.env.NODE_ENV === "production") {
-        bannerUrl = "/uploads/demo-placeholder.jpg";
-      } else {
-        if (existing.bannerUrl) {
-          const oldPath = path.join(process.cwd(), "public", existing.bannerUrl);
-          if (fs.existsSync(oldPath)) await fs.promises.unlink(oldPath);
-        }
-        const bytes = Buffer.from(await image.arrayBuffer());
-        const filename = `${Date.now()}-${image.name.replace(/\s+/g, "_")}`;
-        const filePath = path.join(uploadDir, filename);
-        await fs.promises.writeFile(filePath, bytes);
-        bannerUrl = `/uploads/${filename}`;
-      }
+      const bytes = await image.arrayBuffer();
+      const buffer = Buffer.from(bytes);
+
+      bannerUrl = await new Promise((resolve, reject) => {
+        const uploadStream = cloudinary.uploader.upload_stream(
+          { folder: "koseli/news" },
+          (err, result) => {
+            if (err) reject(err);
+            else resolve(result.secure_url);
+          }
+        );
+        uploadStream.end(buffer);
+      });
     }
 
     const updated = await prisma.news.update({
@@ -103,28 +111,27 @@ export async function PUT(req) {
     return NextResponse.json(updated);
   } catch (err) {
     console.error("PUT /api/news error:", err);
-    return NextResponse.json({ error: "Failed to update news" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to update" }, { status: 500 });
   }
 }
 
-// ✅ DELETE (DELETE)
+// 🔴 DELETE
 export async function DELETE(req) {
   try {
     const { id } = await req.json();
-    if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 });
+    if (!id) {
+      return NextResponse.json({ error: "ID required" }, { status: 400 });
+    }
 
     const existing = await prisma.news.findUnique({ where: { id } });
-    if (!existing) return NextResponse.json({ error: "News not found" }, { status: 404 });
-
-    if (existing.bannerUrl && process.env.NODE_ENV !== "production") {
-      const imgPath = path.join(process.cwd(), "public", existing.bannerUrl);
-      if (fs.existsSync(imgPath)) await fs.promises.unlink(imgPath);
+    if (!existing) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
     await prisma.news.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (err) {
     console.error("DELETE /api/news error:", err);
-    return NextResponse.json({ error: "Failed to delete news" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to delete" }, { status: 500 });
   }
 }

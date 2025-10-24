@@ -3,29 +3,31 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  // Helps handle Neon idle disconnections
+  directUrl = env("DATABASE_URL")
 }
 
 model Event {
-  id           String   @id @default(cuid())
-  title        String
-  date         DateTime
-  description  String
-  bannerUrl    String?
-  
-  location     String?   // 👈 new field
-  isFeatured   Boolean   @default(false)
-  createdAt    DateTime  @default(now())
+  id          String   @id @default(cuid())
+  title       String
+  date        DateTime
+  description String
+  bannerUrl   String?
+
+  location   String? // 👈 new field
+  isFeatured Boolean  @default(false)
+  createdAt  DateTime @default(now())
 }
 
 model News {
-  id          String   @id @default(cuid())
-  title       String
-  date        DateTime @default(now())
-  content     String
-  bannerUrl   String?   // optional image
-  createdAt   DateTime  @default(now())
+  id        String   @id @default(cuid())
+  title     String
+  date      DateTime @default(now())
+  content   String
+  bannerUrl String? // optional image
+  createdAt DateTime @default(now())
 }
 
 model GalleryImage {

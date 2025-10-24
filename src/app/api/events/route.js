@@ -1,12 +1,8 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
-import fs from "fs";
-import path from "path";
+import cloudinary from "@/lib/cloudinary";
 
-export const dynamic = "force-dynamic"; // disables caching on Vercel
-
-const uploadDir = path.join(process.cwd(), "public/uploads");
-if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+export const dynamic = "force-dynamic"; // disable ISR caching
 
 // 🟢 CREATE (POST)
 export async function POST(req) {
@@ -23,17 +19,16 @@ export async function POST(req) {
     }
 
     let bannerUrl = null;
-    if (image && image.name) {
-      if (process.env.NODE_ENV === "production") {
-        // 🚫 no file writes on Vercel
-        bannerUrl = "/uploads/demo-placeholder.jpg";
-      } else {
-        const bytes = Buffer.from(await image.arrayBuffer());
-        const fileName = `${Date.now()}-${image.name.replace(/\s+/g, "_")}`;
-        const filePath = path.join(uploadDir, fileName);
-        await fs.promises.writeFile(filePath, bytes);
-        bannerUrl = `/uploads/${fileName}`;
-      }
+    if (image) {
+      // ✅ Upload to Cloudinary
+      const arrayBuffer = await image.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const base64Image = `data:${image.type};base64,${buffer.toString("base64")}`;
+
+      const upload = await cloudinary.uploader.upload(base64Image, {
+        folder: "koseli/events",
+      });
+      bannerUrl = upload.secure_url;
     }
 
     const created = await prisma.event.create({
@@ -43,7 +38,7 @@ export async function POST(req) {
     return NextResponse.json(created, { status: 201 });
   } catch (err) {
     console.error("POST /api/events error:", err);
-    return NextResponse.json({ events: [], error: "Failed to create event" }, { status: 500 });
+    return NextResponse.json({ error: "Failed to create event" }, { status: 500 });
   }
 }
 
@@ -81,7 +76,7 @@ export async function PUT(req) {
 
     const contentType = req.headers.get("content-type") || "";
 
-    // JSON updates (feature toggle)
+    // ✅ Toggle featured (JSON)
     if (contentType.includes("application/json")) {
       const { isFeatured } = await req.json();
 
@@ -100,7 +95,7 @@ export async function PUT(req) {
       return NextResponse.json(updated);
     }
 
-    // Form updates (full edit)
+    // ✅ Full update (FormData)
     const formData = await req.formData();
     const title = formData.get("title");
     const date = formData.get("date");
@@ -114,20 +109,23 @@ export async function PUT(req) {
 
     let bannerUrl = existing.bannerUrl;
 
-    if (image && image.name) {
-      if (process.env.NODE_ENV === "production") {
-        bannerUrl = "/uploads/demo-placeholder.jpg";
-      } else {
-        if (existing.bannerUrl) {
-          const oldPath = path.join(process.cwd(), "public", existing.bannerUrl);
-          if (fs.existsSync(oldPath)) await fs.promises.unlink(oldPath);
-        }
-        const bytes = Buffer.from(await image.arrayBuffer());
-        const fileName = `${Date.now()}-${image.name.replace(/\s+/g, "_")}`;
-        const filePath = path.join(uploadDir, fileName);
-        await fs.promises.writeFile(filePath, bytes);
-        bannerUrl = `/uploads/${fileName}`;
+    // ✅ Replace image on Cloudinary
+    if (image) {
+      const arrayBuffer = await image.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      const base64Image = `data:${image.type};base64,${buffer.toString("base64")}`;
+
+      // Delete old Cloudinary image if any
+      if (existing.bannerUrl) {
+        const match = existing.bannerUrl.match(/upload\/(?:v\d+\/)?(.+)\.[a-zA-Z]+$/);
+        const publicId = match ? match[1] : null;
+        if (publicId) await cloudinary.uploader.destroy(publicId);
       }
+
+      const upload = await cloudinary.uploader.upload(base64Image, {
+        folder: "koseli/events",
+      });
+      bannerUrl = upload.secure_url;
     }
 
     const updated = await prisma.event.update({
@@ -153,9 +151,10 @@ export async function DELETE(req) {
     if (!existing)
       return NextResponse.json({ error: "Event not found" }, { status: 404 });
 
-    if (existing.bannerUrl && process.env.NODE_ENV !== "production") {
-      const oldPath = path.join(process.cwd(), "public", existing.bannerUrl);
-      if (fs.existsSync(oldPath)) await fs.promises.unlink(oldPath);
+    if (existing.bannerUrl) {
+      const match = existing.bannerUrl.match(/upload\/(?:v\d+\/)?(.+)\.[a-zA-Z]+$/);
+      const publicId = match ? match[1] : null;
+      if (publicId) await cloudinary.uploader.destroy(publicId);
     }
 
     await prisma.event.delete({ where: { id } });
