@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Global reset & typography */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  @apply overflow-x-hidden;
+}
+
+/* Base body styling */
+body {
+  @apply bg-transparent text-white font-sans antialiased;
+  font-family: "Poppins", "Montserrat", "Inter", sans-serif;
+}
+
+/* Smooth link transitions */
+a {
+  @apply transition-colors duration-200;
+}
+
+a:hover {
+  @apply text-brand-accent;
+}
+
+/* Optional: smoother scroll behavior for modern feel */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Utility for nav links (can be reused globally) */
+.nav-link {
+  @apply text-lg md:text-xl font-semibold tracking-wide transition-colors duration-200;
+}
+
+.nav-link:hover {
+  @apply text-brand-primary;
+}
+
+
+.btn-primary {
+  @apply bg-brand-primary text-white font-semibold px-6 py-3 rounded-lg
+         shadow-md hover:brightness-110 hover:shadow-lg
+         transition-all duration-300 ease-in-out;
+}
+
+.btn-outline {
+  @apply border border-brand-primary text-brand-primary font-semibold
+         px-6 py-3 rounded-lg hover:bg-brand-primary hover:text-white
+         transition-all duration-300 ease-in-out;
+}
+
+a {
+  @apply transition-colors duration-200;
+}
+
+a:hover {
+  color: #E91E63; /* Slightly brighter hover tone */
+}
+
+
+/* === Global Section Spacing === */
+section {
+  @apply py-20; /* default for desktop: 80px top & bottom */
+}
+
+/* Smaller spacing on mobile */
+@media (max-width: 640px) {
+  section {
+    @apply py-14; /* 56px */
+  }
+}
+
+/* === Global Typography Enhancements === */
+h1, h2, h3, h4 {
+  letter-spacing: -0.02em;
+  @apply font-bold;
+}
+
+p {
+  line-height: 1.7;
+}
+
+/* === Optional Fade-in Animation for Sections === */
+section {
+  opacity: 0;
+  transform: translateY(20px);
+  animation: fadeInUp 0.6s ease forwards;
+}
+
+@keyframes fadeInUp {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
